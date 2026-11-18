@@ -383,15 +383,15 @@ function vContas() {
       <div class="tabela rola" data-sc="contas"><table class="grid boletos">
         <thead><tr><th class="fixa">Fornecedor</th><th>Valor</th><th>1ª parcela</th><th>2ª parcela</th><th>3ª parcela</th><th>4ª parcela</th><th></th></tr></thead>
         <tbody>
-          ${itens.map(([id, b], i) => `<tr data-id="${id}">
+          ${itens.map(([id, b], i) => { const vParc = {}; parcelas(b).forEach((p) => { vParc[p.slot] = p.v; }); return `<tr data-id="${id}">
             <td class="fixa"><input data-k="b|${id}|forn" data-cf="forn" data-row="${i}" data-col="0" value="${esc(b.forn)}" class="up strong" autocomplete="off"></td>
             <td><input data-k="b|${id}|valor" data-cf="valor" data-row="${i}" data-col="1" value="${fmt(b.valor)}" inputmode="decimal" autocomplete="off"></td>
-            ${[0, 1, 2, 3].map((k) => { const p = b.p?.[k] || {}; return `<td class="parc"><div>
+            ${[0, 1, 2, 3].map((k) => { const p = b.p?.[k] || {}; const vp = vParc[k]; return `<td class="parc"><div>
               <input data-k="b|${id}|p${k}" data-cf="p${k}" data-row="${i}" data-col="${k + 2}" value="${dataCurta(p.d)}" placeholder="dd/mm" inputmode="numeric" autocomplete="off">
               <button class="chk ${p.pago ? 'on' : ''}" data-act="pagoParc" data-p="${k}" ${p.d ? '' : 'disabled'} aria-pressed="${!!p.pago}" aria-label="Parcela ${k + 1} paga"></button>
-            </div></td>`; }).join('')}
+            </div>${vp != null ? `<small class="vparc ${p.pago ? 'pg' : ''}">R$ ${fmt(vp)}</small>` : ''}</td>`; }).join('')}
             <td class="c"><button class="del" data-act="delboleto" aria-label="Apagar boleto">×</button></td>
-          </tr>`).join('')}
+          </tr>`; }).join('')}
           <tr class="novo"><td class="fixa"><input data-k="novoboleto" data-cf="novo" data-row="${itens.length}" data-col="0" placeholder="+ novo fornecedor" class="up" autocomplete="off"></td><td colspan="6"></td></tr>
         </tbody>
       </table></div>
@@ -830,13 +830,17 @@ async function importarArquivo(e) {
   if (!arq) return;
   let data;
   try { data = JSON.parse(await arq.text()); } catch { return toast('Arquivo inválido'); }
-  if (!Array.isArray(data.entradas)) return toast('Arquivo inválido');
-  const nContas = Object.values(data.saidas || {}).reduce((s, l) => s + l.length, 0);
-  if (!confirm(`Importar ${data.entradas.length} lançamentos e ${nContas} contas de saída?\n\nTodos entram como PAGOS. Importar de novo não duplica.`)) return;
+  const nEnt = (data.entradas || []).length;
+  const nSai = Object.values(data.saidas || {}).reduce((s, l) => s + l.length, 0);
+  const nBol = (data.contas || []).length, nEst = (data.estoque || []).length;
+  if (!nEnt && !nSai && !nBol && !nEst) return toast('Arquivo inválido');
+  const partes = [nEnt && `${nEnt} lançamentos (entram como PAGOS)`, nSai && `${nSai} contas de saída`,
+    nBol && `${nBol} boletos de fornecedores`, nEst && `${nEst} produtos no estoque`].filter(Boolean);
+  if (!confirm(`Importar:\n• ${partes.join('\n• ')}\n\nImportar o mesmo arquivo de novo não duplica.`)) return;
   toast('Importando…');
   try {
-    const n = await S.importar(data);
-    toast(`${n} lançamentos importados`);
+    await S.importar(data);
+    toast('Importação concluída');
   } catch (err) { console.error(err); toast('Erro ao importar: ' + err.message); }
 }
 

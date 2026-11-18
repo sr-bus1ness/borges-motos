@@ -267,7 +267,11 @@ tr:hover .del, .del:focus-visible { opacity: 1; }
 .grid.boletos .fixa { min-width: 170px; }
 .grid.boletos td { padding: 0 4px; }
 .parc > div { display: flex; align-items: center; justify-content: center; gap: 4px; }
-.parc input { width: 74px !important; min-width: 0; }
+.parc input { width: 84px !important; padding: 0 2px !important; min-width: 0; height: 30px !important; }
+.grid.boletos td.parc { padding: 4px 4px 5px; }
+.vparc { display: block; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; line-height: 1.2; margin-top: -1px; }
+.vparc.pg { color: var(--ok); }
+.grid.boletos td:has(> input) { height: 52px; }
 .chk:disabled { opacity: .25; cursor: default; border-color: var(--muted); }
 
 .cal {

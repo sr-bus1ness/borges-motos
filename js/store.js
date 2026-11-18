@@ -9,12 +9,14 @@
 import { FIREBASE, EMAIL_LOGIN } from './config.js';
 
 const FB_VER = '10.12.2';
+// ?local no endereço força o modo de teste (dados só neste navegador)
+const USAR_FIREBASE = FIREBASE && !new URLSearchParams(location.search).has('local');
 const LOCAL_KEY = 'borges-local-v1';
 const COLS = ['dias', 'saidas', 'estoque', 'contas'];
 
 //  contas/{AAAA}      { itens: { <id>: { forn, valor, ord, p: { 0..3: { d: 'AAAA-MM-DD', pago } } } } }
 export const state = { dias: {}, saidas: {}, estoque: {}, contas: {} };
-export const status = { modo: FIREBASE ? 'nuvem' : 'local', pendente: false, online: navigator.onLine, erro: '' };
+export const status = { modo: USAR_FIREBASE ? 'nuvem' : 'local', pendente: false, online: navigator.onLine, erro: '' };
 
 const subs = new Set();
 export const onChange = (fn) => subs.add(fn);
@@ -95,7 +97,7 @@ export const delItem = (id) => delDoc('estoque', id);
 // Importa o JSON gerado a partir da planilha. IDs fixos => importar 2x não duplica.
 export async function importar(data) {
   const dias = {};
-  data.entradas.forEach((e, i) => {
+  (data.entradas || []).forEach((e, i) => {
     (dias[e.d] ||= {})['imp' + i] = {
       n: e.n, s: e.s || '', h: e.h || '', v: e.v ?? null, o: (e.o || '').toUpperCase(), pago: true, ord: i,
     };
@@ -111,6 +113,19 @@ export async function importar(data) {
     });
     docs.push(['saidas', String(ano), { contas }]);
   }
+  // boletos das notas de compra (IDs fixos 'nf0', 'nf1'... => reimportar não duplica)
+  const porAno = {};
+  (data.contas || []).forEach((c, i) => {
+    const p = {};
+    (c.p || []).slice(0, 4).forEach((x, k) => { p[k] = { d: x.d, pago: !!x.pago }; });
+    (porAno[c.ano] ||= {})['nf' + i] = { forn: (c.forn || '').toUpperCase(), valor: c.valor ?? null, ord: i, p };
+  });
+  for (const ano in porAno) docs.push(['contas', String(ano), { itens: porAno[ano] }]);
+  (data.estoque || []).forEach((e, i) => {
+    docs.push(['estoque', 'nf' + i, {
+      produto: (e.produto || '').toUpperCase(), qtd: e.qtd ?? null, valor: e.valor ?? null, obs: (e.obs || '').toUpperCase(), ord: i,
+    }]);
+  });
   for (const [c, id, p] of docs) applySet(c, id, p);
   emit(); saveLocal();
   if (fb) {
@@ -120,7 +135,7 @@ export async function importar(data) {
       await b.commit();
     }
   }
-  return data.entradas.length;
+  return docs.length;
 }
 
 // ---------- inicialização / login ----------
@@ -157,7 +172,7 @@ function escutar() {
 export async function iniciar() {
   addEventListener('online', () => { status.online = true; emit(); });
   addEventListener('offline', () => { status.online = false; emit(); });
-  if (!FIREBASE) { loadLocal(); return 'ok'; }
+  if (!USAR_FIREBASE) { loadLocal(); return 'ok'; }
   await carregarFirebase();
   return new Promise((res) => {
     const off = fb.authMod.onAuthStateChanged(fb.auth, (u) => {
